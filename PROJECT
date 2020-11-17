@@ -1,0 +1,7 @@
+domain: datadoghq.com
+repo: github.com/max-rocket-internet/datadog-controller
+resources:
+- group: datadoghq.com
+  kind: DatadogMonitor
+  version: v1beta1
+version: "2"

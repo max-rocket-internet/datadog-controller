@@ -1,0 +1,9 @@
+apiVersion: datadoghq.com/v1beta1
+kind: DatadogMonitor
+metadata:
+  name: apm-error-rate-example
+spec:
+  name: my-service error rate
+  query: "avg(last_5m):sum:trace.http.request.errors{env:stg,service:my-service} / sum:trace.http.request.hits{env:stg,service:my-service} > 1"
+  type: "query alert"
+  message: Service my-service has a high error rate on env:stg

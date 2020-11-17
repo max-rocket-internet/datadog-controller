@@ -1,0 +1,9 @@
+apiVersion: datadoghq.com/v1beta1
+kind: DatadogMonitor
+metadata:
+  name: metric-alert-example
+spec:
+  name: datadog-controller testing metric alert
+  query: "avg(last_5m):sum:system.net.bytes_rcvd{host:host0} > 100.1"
+  type: "metric alert"
+  message: Host host0 has an alert
