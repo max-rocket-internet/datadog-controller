@@ -20,6 +20,8 @@ spec:
 
 ## Installation
 
+You will need a Datadog APP and API key which can be found or created at [app.datadoghq.eu/account/settings](https://app.datadoghq.eu/account/settings#api) or [app.datadoghq.com/account/settings](https://app.datadoghq.com/account/settings#api).
+
 Use the included [Helm](https://helm.sh/) chart in [chart](chart) or install the chart from the [Delivery Hero Helm charts repo](https://github.com/deliveryhero/helm-charts):
 
 ```console
@@ -28,7 +30,7 @@ helm search repo deliveryhero
 helm install datadog-controller deliveryhero/datadog-controller --set datadog.client_api_key="YOUR_API_KEY" --set datadog.client_app_key="YOUR_APP_KEY"
 ```
 
-Docker image is available here: [maxrocketinternet/datadog-controller](https://hub.docker.com/r/maxrocketinternet/datadog-controller)
+Or a docker image is available at [maxrocketinternet/datadog-controller](https://hub.docker.com/r/maxrocketinternet/datadog-controller).
 
 ## Examples
 
@@ -49,7 +51,7 @@ Then run `main.go`:
 go run main.go
 ```
 
-To run tests:
+To run tests you need to [install kubebuilder](https://book.kubebuilder.io/quick-start.html#installation) which includes the required `kube-apiserver` and `etcd` to test the controller:
 
 ```
 go test ./...

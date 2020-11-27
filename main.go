@@ -55,6 +55,13 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
+	datadogApi, err := datadog.New(*logLevel)
+
+	if err != nil {
+		setupLog.Error(err, "unable to create working datadog configuration")
+		os.Exit(1)
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: *metricsAddr,
@@ -72,7 +79,7 @@ func main() {
 		Log:      ctrl.Log.WithName("controllers").WithName("DatadogMonitor"),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("datadog-controller"),
-		Datadog:  datadog.New(*logLevel),
+		Datadog:  datadogApi,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DatadogMonitor")
 		os.Exit(1)

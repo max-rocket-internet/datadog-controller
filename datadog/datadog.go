@@ -4,20 +4,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-logr/logr"
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/max-rocket-internet/datadog-controller/api/v1beta1"
+	"github.com/max-rocket-internet/datadog-controller/datadog/restclient"
 	"github.com/max-rocket-internet/datadog-controller/utils"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"io/ioutil"
-	"os"
+	"net/http"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"strconv"
 	"time"
 )
 
-type TokenValidationResponse struct {
+type ApiKeyValidationResponse struct {
 	Valid bool     `json:"valid"`
 	Error []string `json:"errors"`
 }
@@ -57,12 +57,9 @@ func newConfig() (*Config, error) {
 	return c, nil
 }
 
-const (
-	httpUserAgent = "github/max-rocket-internet/datadog-controller/1.0"
-)
-
 var (
-	client = retryablehttp.NewClient()
+	httpUserAgent = "github/max-rocket-internet/datadog-controller/1.0"
+	httpHeaders   = http.Header{}
 
 	apiLatency = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "datadog_controller",
@@ -84,36 +81,26 @@ var (
 	})
 )
 
-func init() {
-	client.Backoff = retryablehttp.LinearJitterBackoff
-	client.RetryWaitMin = 100 * time.Millisecond
-	client.RetryWaitMax = 500 * time.Millisecond
-	client.RetryMax = 2
-	client.ErrorHandler = retryablehttp.PassthroughErrorHandler
-	client.Logger = nil
-	client.HTTPClient.Timeout = 30 * time.Second
-}
-
-func (d Datadog) testApiToken() error {
+func (d Datadog) validateApiKey() error {
 	d.Log.V(1).Info("Testing API token")
 
-	response := TokenValidationResponse{}
+	response := ApiKeyValidationResponse{}
 
 	results, _, err := d.apiRequest("GET", "/validate", nil)
 	if err != nil {
-		return fmt.Errorf("Error validating token: %v", err)
+		return fmt.Errorf("Error validating API key: %v", err)
 	}
 
 	err = json.Unmarshal(results, &response)
 	if err != nil {
-		return fmt.Errorf("Error unmarshalling token validation response: %v", err)
+		return fmt.Errorf("Error unmarshalling API key validation response: %v", err)
 	}
 
 	if response.Valid {
-		d.Log.V(1).Info("Token validated")
+		d.Log.V(1).Info("API key validated")
 		return nil
 	} else {
-		return fmt.Errorf("Token invalid")
+		return fmt.Errorf("API key invalid")
 	}
 }
 
@@ -197,20 +184,9 @@ func (d Datadog) UpdateMonitor(MonitorId int64, MonitorSpec v1beta1.DatadogMonit
 	return nil
 }
 
-func (d Datadog) apiRequest(RequestMethod string, RequestPath string, RequestBody interface{}) ([]byte, int, error) {
-	req, err := retryablehttp.NewRequest(RequestMethod, d.Conf.datadogApiEndpoint+RequestPath, RequestBody)
-	if err != nil {
-		d.Log.Error(err, fmt.Sprintf("Error creating retryablehttp request"))
-		return nil, 0, err
-	}
-
-	req.Header.Add("DD-API-KEY", d.Conf.datadogApiKey)
-	req.Header.Add("DD-APPLICATION-KEY", d.Conf.datadogAppKey)
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Set("User-Agent", httpUserAgent)
-
+func (d Datadog) apiRequest(RequestMethod string, RequestPath string, RequestBody []byte) ([]byte, int, error) {
 	start := time.Now()
-	resp, err := client.Do(req)
+	resp, err := restclient.Do(RequestMethod, d.Conf.datadogApiEndpoint+RequestPath, RequestBody, httpHeaders)
 	apiLatency.WithLabelValues(RequestPath, strconv.Itoa(resp.StatusCode)).Observe(time.Since(start).Seconds())
 	if err != nil {
 		d.Log.Error(err, fmt.Sprintf("Error making %v request for path %v", RequestMethod, RequestPath))
@@ -235,7 +211,7 @@ func (d Datadog) apiRequest(RequestMethod string, RequestPath string, RequestBod
 	return body, resp.StatusCode, nil
 }
 
-func New(logLevel string) Datadog {
+func New(logLevel string) (Datadog, error) {
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	// How to set logLevel here?
 
@@ -244,16 +220,19 @@ func New(logLevel string) Datadog {
 
 	config, err := newConfig()
 	if err != nil {
-		d.Log.Error(err, "Configuration error")
-		os.Exit(1)
+		return d, err
 	}
+
+	httpHeaders.Add("DD-API-KEY", config.datadogApiKey)
+	httpHeaders.Add("DD-APPLICATION-KEY", config.datadogAppKey)
+	httpHeaders.Add("Content-Type", "application/json")
+	httpHeaders.Add("User-Agent", httpUserAgent)
 
 	d.Conf = config
 
-	if err = d.testApiToken(); err != nil {
-		d.Log.Error(err, "Datadog API key not valid")
-		os.Exit(1)
+	if err = d.validateApiKey(); err != nil {
+		return d, err
 	}
 
-	return d
+	return d, nil
 }
